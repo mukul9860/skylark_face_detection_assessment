@@ -1,31 +1,58 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { jwt, sign, verify } from 'hono/jwt';
-import { upgradeWebSocket } from 'hono/ws';
+import { jwt, sign } from 'hono/jwt';
+import { WebSocketServer, WebSocket } from 'ws';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { URL } from 'url';
 
 const prisma = new PrismaClient();
 const app = new Hono();
 
-// WebSocket connections store
-// In a real production app, you'd use Redis or another shared store
-const sockets = new Map<string, Set<any>>(); // Key: cameraId, Value: Set of WebSocket clients
+const wss = new WebSocketServer({ noServer: true });
+const sockets = new Map<string, Set<WebSocket>>();
 
-// --- MIDDLEWARE ---
-// Add CORS middleware to allow requests from our frontend
-app.use('*', cors({
-  origin: 'http://localhost', // The port your frontend runs on
+wss.on('connection', (ws, request) => {
+  try {
+    const url = new URL(request.url!, `http://${request.headers.host}`);
+    // The client side will connect to ws://localhost:3000/ws?cameraId=123
+    const cameraId = url.searchParams.get('cameraId');
+
+    if (cameraId) {
+      if (!sockets.has(cameraId)) {
+        sockets.set(cameraId, new Set());
+      }
+      sockets.get(cameraId)!.add(ws);
+      console.log(`WebSocket client subscribed to camera ${cameraId}`);
+    } else {
+       console.log("WebSocket client connected without a camera ID.");
+    }
+
+    ws.on('close', () => {
+      if (cameraId) {
+        sockets.get(cameraId)?.delete(ws);
+        console.log(`WebSocket client unsubscribed from camera ${cameraId}`);
+      } else {
+        console.log("WebSocket client disconnected.");
+      }
+    });
+
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+    });
+
+  } catch (err) {
+    console.error("Error handling WebSocket connection:", err);
+    ws.close();
+  }
+});
+
+app.use('/api/*', cors({
+  origin: 'http://localhost:5173',
   credentials: true,
 }));
 
-// JWT Middleware for protecting routes
-const authMiddleware = jwt({
-  secret: process.env.JWT_SECRET || 'a-default-secret',
-});
-
-// --- AUTHENTICATION ROUTES ---
 app.post('/api/register', async (c) => {
     const { username, password } = await c.req.json();
     if (!username || !password) {
@@ -54,21 +81,43 @@ app.post('/api/login', async (c) => {
     return c.json({ token });
 });
 
-// --- PROTECTED ROUTES ---
-// Group for all routes that require authentication
-const protectedApi = app.use('/api/*', authMiddleware);
+app.post('/api/alerts', async (c) => {
+  const { cameraId, snapshotUrl } = await c.req.json();
+  if (!cameraId) {
+      return c.json({ error: "cameraId is required" }, 400);
+  }
+  try {
+      const alert = await prisma.alert.create({
+        data: { cameraId: parseInt(cameraId), snapshotUrl },
+      });
 
-// --- CAMERA MANAGEMENT (CRUD) ---
-protectedApi.get('/api/cameras', async (c) => {
+      const cameraSockets = sockets.get(cameraId.toString());
+      if (cameraSockets) {
+          const message = JSON.stringify(alert);
+          cameraSockets.forEach(socket => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(message);
+              }
+          });
+      }
+      return c.json(alert, 201);
+  } catch(e) {
+      console.error("Error creating alert:", e);
+      return c.json({ error: "Failed to create alert" }, 500);
+  }
+});
+
+
+const authMiddleware = jwt({ secret: process.env.JWT_SECRET || 'a-default-secret' });
+const protectedApi = new Hono().use('/*', authMiddleware);
+
+protectedApi.get('/cameras', async (c) => {
     const payload = c.get('jwtPayload');
-    const cameras = await prisma.camera.findMany({
-        where: { ownerId: payload.id },
-        orderBy: { name: 'asc' },
-    });
+    const cameras = await prisma.camera.findMany({ where: { ownerId: payload.id }, orderBy: {name: 'asc'} });
     return c.json(cameras);
 });
 
-protectedApi.post('/api/cameras', async (c) => {
+protectedApi.post('/cameras', async (c) => {
     const payload = c.get('jwtPayload');
     const { name, location, rtspUrl } = await c.req.json();
     const camera = await prisma.camera.create({
@@ -77,14 +126,38 @@ protectedApi.post('/api/cameras', async (c) => {
     return c.json(camera, 201);
 });
 
-// Start/Stop Camera Processing by calling the worker
-protectedApi.post('/api/cameras/:id/start', async (c) => {
+protectedApi.put('/cameras/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    const cameraId = parseInt(c.req.param('id'));
+    const { name, location, rtspUrl, isEnabled } = await c.req.json();
+    const camera = await prisma.camera.updateMany({
+        where: { id: cameraId, ownerId: payload.id },
+        data: { name, location, rtspUrl, isEnabled },
+    });
+    if (camera.count === 0) {
+        return c.json({ error: 'Camera not found or access denied' }, 404);
+    }
+    return c.json({ message: 'Camera updated successfully' });
+});
+
+protectedApi.delete('/cameras/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    const cameraId = parseInt(c.req.param('id'));
+    const camera = await prisma.camera.deleteMany({
+        where: { id: cameraId, ownerId: payload.id },
+    });
+    if (camera.count === 0) {
+        return c.json({ error: 'Camera not found or access denied' }, 404);
+    }
+    return c.json({ message: 'Camera deleted successfully' });
+});
+
+protectedApi.post('/cameras/:id/start', async (c) => {
     const payload = c.get('jwtPayload');
     const cameraId = parseInt(c.req.param('id'));
     const camera = await prisma.camera.findFirst({ where: { id: cameraId, ownerId: payload.id } });
     if (!camera) return c.json({ error: 'Camera not found or access denied' }, 404);
-    
-    // Send request to the Go worker
+
     try {
         await fetch(`http://worker:8080/start-stream`, {
             method: 'POST',
@@ -98,80 +171,22 @@ protectedApi.post('/api/cameras/:id/start', async (c) => {
     }
 });
 
-// ... Implement Update, Delete, and Stop endpoints similarly ...
-
-// --- ALERT MANAGEMENT ---
-// Endpoint for the WORKER to post alerts to
-app.post('/api/alerts', async (c) => {
-  const { cameraId, snapshotUrl } = await c.req.json();
-  const alert = await prisma.alert.create({
-    data: { cameraId: parseInt(cameraId), snapshotUrl },
-  });
-
-  // Notify subscribed frontend clients via WebSocket
-  const cameraSockets = sockets.get(cameraId.toString());
-  if (cameraSockets) {
-      cameraSockets.forEach(ws => {
-          ws.send(JSON.stringify(alert));
-      });
-  }
-
-  return c.json(alert, 201);
-});
-
-// Endpoint for the FRONTEND to fetch historical alerts
-protectedApi.get('/api/alerts/camera/:id', async (c) => {
-    const payload = c.get('jwtPayload');
-    const cameraId = parseInt(c.req.param('id'));
-    // Ensure user owns this camera before fetching alerts
-    const camera = await prisma.camera.findFirst({ where: { id: cameraId, ownerId: payload.id } });
-    if (!camera) return c.json({ error: 'Camera not found or access denied' }, 404);
-
-    const alerts = await prisma.alert.findMany({
-        where: { cameraId: cameraId },
-        orderBy: { timestamp: 'desc' },
-        take: 20, // Example of pagination
-    });
-    return c.json(alerts);
-});
-
-
-// --- REAL-TIME WEBSOCKET ---
-app.get('/ws', upgradeWebSocket(c => {
-    return {
-        onMessage: (evt, ws) => {
-            try {
-                const data = JSON.parse(evt.data as string);
-                // Client subscribes to a camera feed
-                if (data.type === 'subscribe' && data.cameraId) {
-                    const cameraId = data.cameraId.toString();
-                    if (!sockets.has(cameraId)) {
-                        sockets.set(cameraId, new Set());
-                    }
-                    sockets.get(cameraId)!.add(ws);
-                    console.log(`Client subscribed to camera ${cameraId}`);
-                }
-            } catch (e) {
-                console.error("WS message error:", e);
-            }
-        },
-        onClose: (evt, ws) => {
-            // Remove client from all subscriptions
-            sockets.forEach((socketSet, cameraId) => {
-                if (socketSet.has(ws)) {
-                    socketSet.delete(ws);
-                    console.log(`Client unsubscribed from camera ${cameraId}`);
-                }
-            });
-        },
-    };
-}));
-
+app.route('/api', protectedApi);
 
 const port = 3000;
-console.log(`Backend server running on http://localhost:${port}`);
-
-serve({
+const server = serve({
   fetch: app.fetch,
   port,
+}, (info) => {
+  console.log(`Backend server running on http://localhost:${info.port}`);
+});
+
+server.on('upgrade', (request, socket, head) => {
+  if (request.url?.startsWith('/ws')) {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
 });
