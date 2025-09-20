@@ -1,0 +1,29 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "index.js",
+"scripts": {
+  "dev": "ts-node src/index.ts",
+  "build": "tsc",
+  "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@hono/node-server": "^1.19.3",
+    "@types/node": "^24.5.2",
+    "hono": "^4.9.8",
+    "prisma": "^6.16.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3"
+  }
+}
