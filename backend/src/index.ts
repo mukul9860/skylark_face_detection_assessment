@@ -41,12 +41,12 @@ app.post('/login', async (c) => {
 
 // Auth Middleware (To be added for protected routes)
 
-// --- CAMERA MANAGEMENT [cite: 22] ---
+// --- CAMERA MANAGEMENT  ---
 // We would add CRUD operations here, protected by JWT middleware
 
 // ... (GET /cameras, POST /cameras, etc.)
 
-// --- ALERTS / EVENTS [cite: 27] ---
+// --- ALERTS / EVENTS ---
 // This endpoint is for the Go worker to post alerts TO
 app.post('/alerts', async (c) => {
   const { cameraId, snapshotUrl } = await c.req.json();
