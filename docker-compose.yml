@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: skylark_postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: skylarkdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: skylark_mediamtx
+    ports:
+      - "8554:8554" # port forRTSP
+      - "8888:8888" # port for WebRTC
+      - "1935:1935" # port for RTMP
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
