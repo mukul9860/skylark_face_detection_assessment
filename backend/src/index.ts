@@ -191,8 +191,9 @@ const port = 3000;
 const server = serve({
   fetch: app.fetch,
   port,
+  hostname: '0.0.0.0',
 }, (info) => {
-  console.log(`Backend server running on http://localhost:${info.port}`);
+  console.log(`Backend server running on http://${info.address}:${info.port}`);
 });
 
 server.on('upgrade', (request, socket, head) => {

@@ -11,19 +11,24 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - skylark-app-net
 
   mediamtx:
     image: bluenviron/mediamtx:latest
     container_name: skylark_mediamtx
     ports:
-      - "8554:8554" # port forRTSP
-      - "8888:8888" # port for WebRTC
-      - "1935:1935" # port for RTMP
+      - "8554:8554"
+      - "8888:8888"
+      - "1935:1935"
     restart: unless-stopped
+    networks:
+      - skylark-app-net
 
   backend:
     build: ./backend
     container_name: skylark_backend
+    command: sh -c "npx prisma migrate deploy && npm run dev"
     ports:
       - "3000:3000"
     volumes:
@@ -36,6 +41,8 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
+    networks:
+      - skylark-app-net
 
   worker:
     build: ./worker
@@ -45,6 +52,8 @@ services:
     depends_on:
       - mediamtx
     restart: unless-stopped
+    networks:
+      - skylark-app-net
 
   frontend:
     build: ./frontend
@@ -54,6 +63,12 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - skylark-app-net
 
 volumes:
   postgres_data:
+
+networks:
+  skylark-app-net:
+    driver: bridge
