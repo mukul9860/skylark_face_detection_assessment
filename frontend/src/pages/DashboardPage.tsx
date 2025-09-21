@@ -23,15 +23,17 @@ export default function DashboardPage() {
     }, [navigate]);
 
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            <Typography variant="h4" component="h1" gutterBottom>Camera Dashboard</Typography>
-            <Grid container spacing={3}>
-                {cameras.map((camera) => (
-                    <Grid item xs={12} md={6} lg={4} key={camera.id}>
-                        <CameraTile camera={camera} />
-                    </Grid>
-                ))}
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Camera Dashboard
+        </Typography>
+        <Grid container spacing={3}>
+          {cameras.map((camera) => (
+            <Grid item xs={12} md={6} lg={4} key={camera.id}>
+              <CameraTile camera={camera} />
             </Grid>
-        </Container>
+          ))}
+        </Grid>
+      </Container>
     );
 }
