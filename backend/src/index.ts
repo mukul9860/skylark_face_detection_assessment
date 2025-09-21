@@ -16,7 +16,6 @@ const sockets = new Map<string, Set<WebSocket>>();
 wss.on('connection', (ws, request) => {
   try {
     const url = new URL(request.url!, `http://${request.headers.host}`);
-    // The client side will connect to ws://localhost:3000/ws?cameraId=123
     const cameraId = url.searchParams.get('cameraId');
 
     if (cameraId) {
@@ -49,7 +48,7 @@ wss.on('connection', (ws, request) => {
 });
 
 app.use('/api/*', cors({
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost', 'http://localhost:5173'],
   credentials: true,
 }));
 
@@ -113,25 +112,34 @@ const protectedApi = new Hono().use('/*', authMiddleware);
 
 protectedApi.get('/cameras', async (c) => {
     const payload = c.get('jwtPayload');
-    const cameras = await prisma.camera.findMany({ where: { ownerId: payload.id }, orderBy: {name: 'asc'} });
+    if (!payload || !payload.id) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
+    const cameras = await prisma.camera.findMany({ where: { ownerId: payload.id as number }, orderBy: {name: 'asc'} });
     return c.json(cameras);
 });
 
 protectedApi.post('/cameras', async (c) => {
     const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
     const { name, location, rtspUrl } = await c.req.json();
     const camera = await prisma.camera.create({
-        data: { name, location, rtspUrl, ownerId: payload.id },
+        data: { name, location, rtspUrl, ownerId: payload.id as number },
     });
     return c.json(camera, 201);
 });
 
 protectedApi.put('/cameras/:id', async (c) => {
     const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
     const cameraId = parseInt(c.req.param('id'));
     const { name, location, rtspUrl, isEnabled } = await c.req.json();
     const camera = await prisma.camera.updateMany({
-        where: { id: cameraId, ownerId: payload.id },
+        where: { id: cameraId, ownerId: payload.id as number },
         data: { name, location, rtspUrl, isEnabled },
     });
     if (camera.count === 0) {
@@ -142,9 +150,12 @@ protectedApi.put('/cameras/:id', async (c) => {
 
 protectedApi.delete('/cameras/:id', async (c) => {
     const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
     const cameraId = parseInt(c.req.param('id'));
     const camera = await prisma.camera.deleteMany({
-        where: { id: cameraId, ownerId: payload.id },
+        where: { id: cameraId, ownerId: payload.id as number },
     });
     if (camera.count === 0) {
         return c.json({ error: 'Camera not found or access denied' }, 404);
@@ -154,8 +165,11 @@ protectedApi.delete('/cameras/:id', async (c) => {
 
 protectedApi.post('/cameras/:id/start', async (c) => {
     const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+      return c.json({ error: 'Invalid token payload' }, 401);
+    }
     const cameraId = parseInt(c.req.param('id'));
-    const camera = await prisma.camera.findFirst({ where: { id: cameraId, ownerId: payload.id } });
+    const camera = await prisma.camera.findFirst({ where: { id: cameraId, ownerId: payload.id as number } });
     if (!camera) return c.json({ error: 'Camera not found or access denied' }, 404);
 
     try {
