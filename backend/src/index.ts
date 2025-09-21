@@ -112,7 +112,7 @@ const protectedApi = new Hono().use('/*', authMiddleware);
 
 protectedApi.get('/cameras', async (c) => {
     const payload = c.get('jwtPayload');
-    if (!payload || !payload.id) {
+     if (!payload || !payload.id) {
       return c.json({ error: 'Invalid token payload' }, 401);
     }
     const cameras = await prisma.camera.findMany({ where: { ownerId: payload.id as number }, orderBy: {name: 'asc'} });
