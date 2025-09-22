@@ -89,13 +89,7 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		"-f", "rtsp",
 		fmt.Sprintf("rtsp://mediamtx:8554/%s", cameraID),
 	)
-	ffmpegOutputCmd.Stdin, _ = ffmpegInputCmd.StdoutPipe()
-
-	outputPipe, err := ffmpegOutputCmd.StdinPipe()
-	if err != nil {
-		log.Printf("[%s] ERROR: Failed to get stdin pipe for output ffmpeg: %v", cameraID, err)
-		return
-	}
+	ffmpegOutputStdin, _ := ffmpegOutputCmd.StdinPipe()
 
 	if err := ffmpegInputCmd.Start(); err != nil {
 		log.Printf("[%s] ERROR: Failed to start input ffmpeg: %v", cameraID, err)
@@ -133,12 +127,11 @@ func processAndPublishStream(cameraID, rtspURL string) {
 			go postAlert(cameraID)
 		}
 
-		if _, err := outputPipe.Write(img.ToBytes()); err != nil {
+		if _, err := ffmpegOutputStdin.Write(img.ToBytes()); err != nil {
 			log.Printf("[%s] ERROR: Failed to write frame to output ffmpeg: %v", cameraID, err)
 			img.Close()
 			break
 		}
-
 		img.Close()
 	}
 

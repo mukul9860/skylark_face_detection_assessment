@@ -18,15 +18,16 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: skylark_mediamtx
     ports:
-      - "8554:8554"
-      - "8888:8888"
-      - "1935:1935"
-    volumes:
-      - ./mediamtx.yml:/mediamtx.yml
+      - "8554:8554" # RTSP
+      - "8888:8888" # WebRTC (HTTP)
+      - "1935:1935" # RTMP
     environment:
-      - MTX_WEBRTC_ALLOWED_ORIGINS=*
+      - MTX_PROTOCOLS=tcp
+      - MTX_API=yes
+      - MTX_WEBRTC=yes
       - MTX_API_ALLOWED_ORIGINS=*
-    command: mediamtx.yml
+      - MTX_WEBRTC_ALLOWED_ORIGINS=*
+      - MTX_WEBRTC_ALLOWED_HEADERS=Content-Type
     restart: unless-stopped
     networks:
       - skylark-app-net
