@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"gocv.io/x/gocv"
@@ -84,9 +85,11 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		"-r", "15",
 		"-i", "pipe:0",
 		"-c:v", "libx264",
-		"-preset", "ultrafast",
+		"-preset", "veryfast",
 		"-tune", "zerolatency",
+		"-pix_fmt", "yuv420p",
 		"-f", "rtsp",
+		"-rtsp_transport", "tcp",
 		fmt.Sprintf("rtsp://mediamtx:8554/%s", cameraID),
 	)
 	ffmpegOutputStdin, _ := ffmpegOutputCmd.StdinPipe()
@@ -103,19 +106,18 @@ func processAndPublishStream(cameraID, rtspURL string) {
 	mu.Lock()
 	runningCameras[cameraID] = &streamProcesses{inputCmd: ffmpegInputCmd, outputCmd: ffmpegOutputCmd}
 	mu.Unlock()
-	log.Printf("[%s] Started processing and publishing stream for camera %s", cameraID, cameraID)
+	log.Printf("[%s] Started processing and publishing stream", cameraID)
 
 	frameBuffer := make([]byte, frameSize)
 	for {
 		if _, err := io.ReadFull(ffmpegInputStdout, frameBuffer); err != nil {
-			log.Printf("[%s] ERROR: Input stream ended: %v", cameraID, err)
+			log.Printf("[%s] Input stream ended: %v", cameraID, err)
 			break
 		}
 
 		img, err := gocv.NewMatFromBytes(frameHeight, frameWidth, gocv.MatTypeCV8UC3, frameBuffer)
 		if err != nil {
 			log.Printf("[%s] ERROR: Could not convert frame buffer to Mat: %v", cameraID, err)
-			img.Close()
 			continue
 		}
 
@@ -128,16 +130,19 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		}
 
 		if _, err := ffmpegOutputStdin.Write(img.ToBytes()); err != nil {
-			log.Printf("[%s] ERROR: Failed to write frame to output ffmpeg: %v", cameraID, err)
-			img.Close()
+			log.Printf("[%s] Output stream closed: %v", cameraID, err)
 			break
 		}
 		img.Close()
 	}
 
 	log.Printf("[%s] Cleaning up processes for camera %s", cameraID, cameraID)
-	ffmpegInputCmd.Process.Kill()
-	ffmpegOutputCmd.Process.Kill()
+	if ffmpegInputCmd.Process != nil {
+		ffmpegInputCmd.Process.Signal(syscall.SIGTERM)
+	}
+	if ffmpegOutputCmd.Process != nil {
+		ffmpegOutputCmd.Process.Signal(syscall.SIGTERM)
+	}
 	ffmpegInputCmd.Wait()
 	ffmpegOutputCmd.Wait()
 
