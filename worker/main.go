@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"image/color"
 	"io"
 	"log"
@@ -109,6 +110,9 @@ func processAndPublishStream(cameraID, rtspURL string) {
 	log.Printf("[%s] Started processing and publishing stream", cameraID)
 
 	frameBuffer := make([]byte, frameSize)
+	var lastRects []image.Rectangle
+	frameCount := 0
+
 	for {
 		if _, err := io.ReadFull(ffmpegInputStdout, frameBuffer); err != nil {
 			log.Printf("[%s] Input stream ended: %v", cameraID, err)
@@ -121,16 +125,27 @@ func processAndPublishStream(cameraID, rtspURL string) {
 			continue
 		}
 
-		rects := classifier.DetectMultiScale(img)
-		if len(rects) > 0 {
-			for _, r := range rects {
+		frameCount++
+
+		if frameCount%10 == 0 {
+			rects := classifier.DetectMultiScale(img)
+			if len(rects) > 0 {
+				lastRects = rects
+				go postAlert(cameraID)
+			} else {
+				lastRects = nil
+			}
+		}
+
+		if len(lastRects) > 0 {
+			for _, r := range lastRects {
 				gocv.Rectangle(&img, r, color.RGBA{0, 255, 0, 0}, 2)
 			}
-			go postAlert(cameraID)
 		}
 
 		if _, err := ffmpegOutputStdin.Write(img.ToBytes()); err != nil {
 			log.Printf("[%s] Output stream closed: %v", cameraID, err)
+			img.Close()
 			break
 		}
 		img.Close()
