@@ -25,10 +25,9 @@ var runningCameras = make(map[string]*streamProcesses)
 var mu sync.Mutex
 
 const (
-	frameWidth    = 640
-	frameHeight   = 480
-	processingFPS = 5
-	frameSize     = frameWidth * frameHeight * 3
+	frameWidth  = 640
+	frameHeight = 480
+	frameSize   = frameWidth * frameHeight * 3
 )
 
 func main() {
@@ -75,7 +74,7 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		"-f", "rawvideo",
 		"-pix_fmt", "bgr24",
 		"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
-		"-r", fmt.Sprintf("%d", processingFPS),
+		"-r", "15",
 		"pipe:1",
 	)
 	ffmpegInputStdout, _ := ffmpegInputCmd.StdoutPipe()
@@ -84,7 +83,7 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		"-f", "rawvideo",
 		"-pix_fmt", "bgr24",
 		"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
-		"-r", fmt.Sprintf("%d", processingFPS),
+		"-r", "15",
 		"-i", "pipe:0",
 		"-c:v", "libx264",
 		"-preset", "veryfast",
@@ -111,7 +110,9 @@ func processAndPublishStream(cameraID, rtspURL string) {
 	log.Printf("[%s] Started processing and publishing stream", cameraID)
 
 	frameBuffer := make([]byte, frameSize)
+
 	var lastRects []image.Rectangle
+	frameCount := 0
 
 	for {
 		if _, err := io.ReadFull(ffmpegInputStdout, frameBuffer); err != nil {
@@ -125,12 +126,15 @@ func processAndPublishStream(cameraID, rtspURL string) {
 			continue
 		}
 
-		rects := classifier.DetectMultiScale(img)
-		if len(rects) > 0 {
-			lastRects = rects
-			go postAlert(cameraID)
-		} else {
-			lastRects = nil
+		frameCount++
+		if frameCount%10 == 0 {
+			rects := classifier.DetectMultiScale(img)
+			if len(rects) > 0 {
+				lastRects = rects
+				go postAlert(cameraID)
+			} else {
+				lastRects = nil
+			}
 		}
 
 		if len(lastRects) > 0 {
@@ -147,6 +151,7 @@ func processAndPublishStream(cameraID, rtspURL string) {
 		img.Close()
 	}
 
+	// --- FIX: More robust cleanup logic ---
 	log.Printf("[%s] Cleaning up processes for camera %s", cameraID, cameraID)
 	if ffmpegInputCmd.Process != nil {
 		ffmpegInputCmd.Process.Signal(syscall.SIGTERM)
