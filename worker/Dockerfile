@@ -43,10 +43,8 @@ RUN cmake \
     -D OPENCV_GENERATE_PKGCONFIG=ON \
     ../opencv
 
-# Compile and install
 RUN make -j$(nproc) && make install
 
-# Build the Go app against the custom OpenCV
 FROM golang:1.23-bullseye AS go-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -79,6 +77,7 @@ RUN CGO_ENABLED=1 go build -o /skylark-worker .
 FROM debian:bullseye
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     libgtk-3-0 \
     libavcodec58 \
     libavformat58 \

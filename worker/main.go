@@ -14,7 +14,12 @@ import (
 	"gocv.io/x/gocv"
 )
 
-var runningCameras = make(map[string]*exec.Cmd)
+type streamProcesses struct {
+	inputCmd  *exec.Cmd
+	outputCmd *exec.Cmd
+}
+
+var runningCameras = make(map[string]*streamProcesses)
 var mu sync.Mutex
 
 const (
@@ -44,7 +49,7 @@ func main() {
 		}
 		mu.Unlock()
 
-		go processStream(req.CameraID, req.RtspURL)
+		go processAndPublishStream(req.CameraID, req.RtspURL)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Stream processing initiated"})
 	})
@@ -53,7 +58,7 @@ func main() {
 	r.Run(":8080")
 }
 
-func processStream(cameraID, rtspURL string) {
+func processAndPublishStream(cameraID, rtspURL string) {
 	classifier := gocv.NewCascadeClassifier()
 	defer classifier.Close()
 	if !classifier.Load("haarcascade_frontalface_default.xml") {
@@ -70,17 +75,41 @@ func processStream(cameraID, rtspURL string) {
 		"-r", "15",
 		"pipe:1",
 	)
-
 	ffmpegInputStdout, _ := ffmpegInputCmd.StdoutPipe()
+
+	ffmpegOutputCmd := exec.Command("ffmpeg",
+		"-f", "rawvideo",
+		"-pix_fmt", "bgr24",
+		"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
+		"-r", "15",
+		"-i", "pipe:0",
+		"-c:v", "libx264",
+		"-preset", "ultrafast",
+		"-tune", "zerolatency",
+		"-f", "rtsp",
+		fmt.Sprintf("rtsp://mediamtx:8554/%s", cameraID),
+	)
+	ffmpegOutputCmd.Stdin, _ = ffmpegInputCmd.StdoutPipe()
+
+	outputPipe, err := ffmpegOutputCmd.StdinPipe()
+	if err != nil {
+		log.Printf("[%s] ERROR: Failed to get stdin pipe for output ffmpeg: %v", cameraID, err)
+		return
+	}
+
 	if err := ffmpegInputCmd.Start(); err != nil {
 		log.Printf("[%s] ERROR: Failed to start input ffmpeg: %v", cameraID, err)
 		return
 	}
+	if err := ffmpegOutputCmd.Start(); err != nil {
+		log.Printf("[%s] ERROR: Failed to start output ffmpeg: %v", cameraID, err)
+		return
+	}
 
 	mu.Lock()
-	runningCameras[cameraID] = ffmpegInputCmd
+	runningCameras[cameraID] = &streamProcesses{inputCmd: ffmpegInputCmd, outputCmd: ffmpegOutputCmd}
 	mu.Unlock()
-	log.Printf("[%s] Started processing stream", cameraID)
+	log.Printf("[%s] Started processing and publishing stream for camera %s", cameraID, cameraID)
 
 	frameBuffer := make([]byte, frameSize)
 	for {
@@ -92,6 +121,7 @@ func processStream(cameraID, rtspURL string) {
 		img, err := gocv.NewMatFromBytes(frameHeight, frameWidth, gocv.MatTypeCV8UC3, frameBuffer)
 		if err != nil {
 			log.Printf("[%s] ERROR: Could not convert frame buffer to Mat: %v", cameraID, err)
+			img.Close()
 			continue
 		}
 
@@ -100,18 +130,28 @@ func processStream(cameraID, rtspURL string) {
 			for _, r := range rects {
 				gocv.Rectangle(&img, r, color.RGBA{0, 255, 0, 0}, 2)
 			}
-
 			go postAlert(cameraID)
+		}
+
+		if _, err := outputPipe.Write(img.ToBytes()); err != nil {
+			log.Printf("[%s] ERROR: Failed to write frame to output ffmpeg: %v", cameraID, err)
+			img.Close()
+			break
 		}
 
 		img.Close()
 	}
 
+	log.Printf("[%s] Cleaning up processes for camera %s", cameraID, cameraID)
+	ffmpegInputCmd.Process.Kill()
+	ffmpegOutputCmd.Process.Kill()
 	ffmpegInputCmd.Wait()
+	ffmpegOutputCmd.Wait()
+
 	mu.Lock()
 	delete(runningCameras, cameraID)
 	mu.Unlock()
-	log.Printf("[%s] Stopped processing stream", cameraID)
+	log.Printf("[%s] Stopped processing stream for camera %s", cameraID, cameraID)
 }
 
 func postAlert(cameraID string) {

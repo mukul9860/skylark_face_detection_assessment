@@ -21,6 +21,12 @@ services:
       - "8554:8554"
       - "8888:8888"
       - "1935:1935"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    environment:
+      - MTX_WEBRTC_ALLOWED_ORIGINS=*
+      - MTX_API_ALLOWED_ORIGINS=*
+    command: mediamtx.yml
     restart: unless-stopped
     networks:
       - skylark-app-net
