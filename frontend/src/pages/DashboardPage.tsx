@@ -126,7 +126,7 @@ export default function DashboardPage() {
     return (
       <Grid container spacing={3}>
         {cameras.map((camera) => (
-          <Grid item xs={12} md={6} lg={4} key={camera.id}>
+          <Grid item xs={12} sm={6} md={6} lg={4} key={camera.id}>
             <CameraTile
               camera={camera}
               onCameraUpdate={handleCameraUpdate}
@@ -141,16 +141,23 @@ export default function DashboardPage() {
   return (
     <>
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Box 
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 3,
+            gap: 2
+          }}>
           <Typography variant="h4" component="h1">Camera Dashboard</Typography>
-          <Box>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, width: { xs: '100%', sm: 'auto' }, gap: 2 }}>
             {cameras.length > 0 && (
               <Button 
                 variant="contained" 
                 startIcon={<AddIcon />} 
                 onClick={handleOpen}
-                sx={{ mr: 2 }}
-              >
+                sx={{ width: { xs: '100%', sm: 'auto' } }}>
                 Add Camera
               </Button>
             )}
@@ -158,13 +165,16 @@ export default function DashboardPage() {
               variant="outlined" 
               startIcon={<LogoutIcon />} 
               onClick={handleLogout}
-            >
+              sx={{ width: { xs: '100%', sm: 'auto' } }}>
               Logout
             </Button>
           </Box>
         </Box>
+
         <Grid container spacing={4}>
-          <Grid item xs={12} md={8}>{renderContent()}</Grid>
+          <Grid item xs={12} md={8}>
+            {renderContent()}
+          </Grid>
           <Grid item xs={12} md={4}>
             <Paper elevation={3} sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>Recent Alerts</Typography>

@@ -4,7 +4,7 @@ import {
     FormControlLabel, Switch, List, ListItem, ListItemText, IconButton, 
     Dialog, DialogTitle, DialogContent, TextField, DialogActions, DialogContentText
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, VideocamOff as VideocamOffIcon } from '@mui/icons-material';
 import WebRTCPlayer from './WebRTCPlayer';
 import api from '../services/api';
 
@@ -40,8 +40,10 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     const [streamState, setStreamState] = useState<'stopped' | 'connecting' | 'streaming' | 'error'>('stopped');
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [faceDetection, setFaceDetection] = useState(camera.faceDetectionEnabled);
+    
     const [openEdit, setOpenEdit] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    
     const [editedCamera, setEditedCamera] = useState({ 
         name: camera.name, 
         location: camera.location, 
@@ -49,6 +51,8 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     });
 
     useEffect(() => {
+        if (!faceDetection) return;
+
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws?cameraId=${camera.id}`;
         const ws = new WebSocket(wsUrl);
@@ -61,7 +65,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         ws.onclose = () => console.log(`WebSocket disconnected for camera ${camera.id}`);
 
         return () => ws.close();
-    }, [camera.id]);
+    }, [camera.id, faceDetection]);
     
     const handleStartStream = async () => {
         setIsStreaming(true);
@@ -116,7 +120,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
             console.error(`Failed to delete camera ${camera.id}`, error);
         }
     };
-    
+
     const handleOpenEdit = () => setOpenEdit(true);
     const handleCloseEdit = () => setOpenEdit(false);
 
@@ -129,22 +133,35 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
 
     return (
         <>
-            <Card>
-                <Box sx={{ position: 'relative', height: 240, backgroundColor: '#000' }}>
+            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ position: 'relative', height: 240, backgroundColor: '#000', flexShrink: 0 }}>
                     {isStreaming ? (
                         <WebRTCPlayer 
                             cameraId={camera.id} 
                             latestAlert={alerts[0]} 
-                            onStreamStateChange={(newState) => setStreamState(newState)}
-                        />
+                            onStreamStateChange={(newState) => setStreamState(newState)}/>
                     ) : (
-                        <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                        <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#333' }}>
+                             <VideocamOffIcon sx={{ fontSize: 60, color: 'rgba(255, 255, 255, 0.5)' }} />
+                        </Box>
                     )}
                 </Box>
-                <CardContent>
-                    <Box display="flex" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h6" noWrap>{camera.name}</Typography>
-                        <Box>
+                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', pb: 0 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                        <Typography 
+                            variant="h6" 
+                            noWrap 
+                            sx={{ 
+                                flexGrow: 1, 
+                                mr: 1,
+                                minWidth: 0,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                            {camera.name}
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexShrink: 0 }}>
                             <IconButton size="small" onClick={handleOpenEdit} disabled={isBusy}><EditIcon /></IconButton>
                             <IconButton size="small" onClick={() => setDeleteConfirmOpen(true)} disabled={isBusy}><DeleteIcon /></IconButton>
                         </Box>
@@ -153,11 +170,12 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
                     <FormControlLabel
                         control={ <Switch checked={faceDetection} onChange={handleToggleFaceDetection} name="faceDetection" disabled={isBusy} /> }
                         label="Face Detection"
+                        sx={{ mb: 1 }}
                     />
-                    <Divider sx={{ my: 2 }} />
+                    <Divider sx={{ my: 1 }} />
 
                     <Typography variant="subtitle2">Recent Alerts</Typography>
-                    <List dense>
+                    <List dense sx={{ flexGrow: 1, overflowY: 'auto', maxHeight: 150 }}>
                         {alerts.length > 0 ? alerts.map(alert => (
                            <ListItem key={alert.id} disableGutters>
                                <ListItemText primary={`Face detected at ${new Date(alert.timestamp).toLocaleTimeString()}`} />
@@ -165,7 +183,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
                         )) : <Typography variant="body2" color="text.secondary">No recent alerts</Typography>}
                     </List>
                 </CardContent>
-                <CardActions>
+                <CardActions sx={{ mt: 'auto' }}>
                     <Button size="small" onClick={handleStartStream} disabled={isBusy}>
                         {streamState === 'connecting' ? 'Connecting...' : 'Start Stream'}
                     </Button>
