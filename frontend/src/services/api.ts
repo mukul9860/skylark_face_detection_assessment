@@ -1,15 +1,12 @@
-import axios from 'axios';
+import axios from "axios";
 
-const api = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api",
 });
 
-api.interceptors.request.use(
+apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -20,4 +17,20 @@ api.interceptors.request.use(
   }
 );
 
-export default api;
+export const startStream = async (
+  cameraId: string,
+  rtspUrl: string,
+  faceDetectionEnabled: boolean
+) => {
+  return apiClient.post("/worker/start-stream", {
+    cameraId,
+    rtspUrl,
+    faceDetectionEnabled,
+  });
+};
+
+export const stopStream = async (cameraId: string) => {
+  return apiClient.post("/worker/stop-stream", { cameraId });
+};
+
+export default apiClient;

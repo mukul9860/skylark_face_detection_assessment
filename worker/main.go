@@ -103,8 +103,12 @@ func main() {
 		}
 	})
 
-	log.Println("✅ Go Worker running on port 8080")
-	r.Run(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("✅ Go Worker starting on port %s", port)
+	r.Run(":" + port)
 }
 
 func startStreamPipelines(cameraID, rtspURL string, detectionEnabled bool) {
