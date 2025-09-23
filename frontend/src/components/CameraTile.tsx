@@ -1,14 +1,32 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, Typography, CardActions, Button, Box, List, ListItem, ListItemText, Divider } from '@mui/material';
+import { Card, CardContent, Typography, CardActions, Button, Box, Divider, FormControlLabel, Switch, List, ListItem, ListItemText } from '@mui/material';
 import WebRTCPlayer from './WebRTCPlayer';
 import api from '../services/api';
 
-export default function CameraTile({ camera }: { camera: any }) {
+// Update the Camera interface to include the new field
+interface Camera {
+  id: number;
+  name: string;
+  location: string;
+  rtspUrl: string;
+  isEnabled: boolean;
+  faceDetectionEnabled: boolean;
+}
+
+interface Alert {
+  id: number;
+  timestamp: string;
+}
+
+export default function CameraTile({ camera }: { camera: Camera }) {
     const [isStreaming, setIsStreaming] = useState(false);
-    const [alerts, setAlerts] = useState<any[]>([]);
+    const [alerts, setAlerts] = useState<Alert[]>([]);
+    const [faceDetection, setFaceDetection] = useState(camera.faceDetectionEnabled);
 
     useEffect(() => {
-        const ws = new WebSocket(`ws://localhost/ws?cameraId=${camera.id}`);
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws?cameraId=${camera.id}`;
+        const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => console.log(`WebSocket connected for camera ${camera.id}`);
         ws.onmessage = (event) => {
@@ -29,13 +47,51 @@ export default function CameraTile({ camera }: { camera: any }) {
         }
     };
 
+    const handleStopStream = async () => {
+        try {
+            await api.post(`/cameras/${camera.id}/stop`);
+            setIsStreaming(false);
+        } catch (error) {
+            console.error(`Failed to stop stream for camera ${camera.id}`, error);
+        }
+    };
+
+    const handleToggleFaceDetection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const isEnabled = event.target.checked;
+        setFaceDetection(isEnabled);
+        try {
+            await api.put(`/cameras/${camera.id}/toggle-detection`, {
+                faceDetectionEnabled: isEnabled
+            });
+        } catch (error) {
+            console.error(`Failed to toggle face detection for camera ${camera.id}`, error);
+            setFaceDetection(!isEnabled);
+        }
+    };
+
     return (
         <Card>
             {isStreaming ? <WebRTCPlayer cameraId={camera.id} /> : <Box sx={{ height: 240, backgroundColor: '#000' }} />}
             <CardContent>
-                <Typography variant="h6">{camera.name}</Typography>
-                <Typography color="text.secondary">{camera.location}</Typography>
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Typography variant="h6">{camera.name}</Typography>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={faceDetection}
+                                onChange={handleToggleFaceDetection}
+                                name="faceDetection"
+                                disabled={isStreaming}
+                            />
+                        }
+                        label="Face Detection"
+                        labelPlacement="start"
+                    />
+                </Box>
+                <Typography color="text.secondary" gutterBottom>{camera.location}</Typography>
+                
                 <Divider sx={{ my: 2 }} />
+
                 <Typography variant="subtitle2">Recent Alerts</Typography>
                 <List dense>
                     {alerts.length > 0 ? alerts.map(alert => (
@@ -47,7 +103,7 @@ export default function CameraTile({ camera }: { camera: any }) {
             </CardContent>
             <CardActions>
                 <Button size="small" onClick={handleStartStream} disabled={isStreaming}>Start Stream</Button>
-                {/* A 'Stop Stream' button would go here */}
+                <Button size="small" color="secondary" onClick={handleStopStream} disabled={!isStreaming}>Stop Stream</Button>
             </CardActions>
         </Card>
     );

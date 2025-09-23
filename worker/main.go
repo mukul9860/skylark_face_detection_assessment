@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"image/color"
 	"io"
 	"log"
 	"net/http"
@@ -16,17 +15,18 @@ import (
 )
 
 type streamProcesses struct {
-	inputCmd  *exec.Cmd
-	outputCmd *exec.Cmd
+	passthroughCmd *exec.Cmd
+	processingCmd  *exec.Cmd
 }
 
 var runningCameras = make(map[string]*streamProcesses)
 var mu sync.Mutex
 
 const (
-	frameWidth  = 640
-	frameHeight = 480
-	frameSize   = frameWidth * frameHeight * 3
+	frameWidth       = 640
+	frameHeight      = 480
+	faceDetectionFPS = 2
+	frameSize        = frameWidth * frameHeight * 3
 )
 
 func main() {
@@ -34,8 +34,9 @@ func main() {
 
 	r.POST("/start-stream", func(c *gin.Context) {
 		var req struct {
-			CameraID string `json:"cameraId"`
-			RtspURL  string `json:"rtspUrl"`
+			CameraID             string `json:"cameraId"`
+			RtspURL              string `json:"rtspUrl"`
+			FaceDetectionEnabled bool   `json:"faceDetectionEnabled"`
 		}
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
@@ -50,107 +51,135 @@ func main() {
 		}
 		mu.Unlock()
 
-		go processAndPublishStream(req.CameraID, req.RtspURL)
+		go startStreamPipelines(req.CameraID, req.RtspURL, req.FaceDetectionEnabled)
 
 		c.JSON(http.StatusOK, gin.H{"message": "Stream processing initiated"})
+	})
+
+	r.POST("/stop-stream", func(c *gin.Context) {
+		var req struct {
+			CameraID string `json:"cameraId"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+			return
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if procs, ok := runningCameras[req.CameraID]; ok {
+			log.Printf("[%s] Received stop request. Terminating processes...", req.CameraID)
+			if procs.passthroughCmd != nil && procs.passthroughCmd.Process != nil {
+				procs.passthroughCmd.Process.Signal(syscall.SIGTERM)
+			}
+			if procs.processingCmd != nil && procs.processingCmd.Process != nil {
+				procs.processingCmd.Process.Signal(syscall.SIGTERM)
+			}
+			delete(runningCameras, req.CameraID)
+			c.JSON(http.StatusOK, gin.H{"message": "Stream stopped"})
+		} else {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Stream not found"})
+		}
 	})
 
 	log.Println("✅ Go Worker running on port 8080")
 	r.Run(":8080")
 }
 
-func processAndPublishStream(cameraID, rtspURL string) {
-	classifier := gocv.NewCascadeClassifier()
-	defer classifier.Close()
-	if !classifier.Load("haarcascade_frontalface_default.xml") {
-		log.Printf("[%s] ERROR: Failed to load cascade file", cameraID)
-		return
-	}
+func startStreamPipelines(cameraID, rtspURL string, detectionEnabled bool) {
 
-	ffmpegInputCmd := exec.Command("ffmpeg",
+	passthroughCmd := exec.Command("ffmpeg",
 		"-rtsp_transport", "tcp",
 		"-i", rtspURL,
-		"-f", "rawvideo",
-		"-pix_fmt", "bgr24",
-		"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
-		"-r", "15",
-		"pipe:1",
-	)
-	ffmpegInputStdout, _ := ffmpegInputCmd.StdoutPipe()
-
-	ffmpegOutputCmd := exec.Command("ffmpeg",
-		"-f", "rawvideo",
-		"-pix_fmt", "bgr24",
-		"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
-		"-r", "15",
-		"-i", "pipe:0",
-		"-c:v", "libx264",
-		"-preset", "veryfast",
-		"-tune", "zerolatency",
-		"-pix_fmt", "yuv420p",
+		"-c:v", "copy",
+		"-an",
 		"-f", "rtsp",
 		"-rtsp_transport", "tcp",
 		fmt.Sprintf("rtsp://mediamtx:8554/%s", cameraID),
 	)
-	ffmpegOutputStdin, _ := ffmpegOutputCmd.StdinPipe()
 
-	if err := ffmpegInputCmd.Start(); err != nil {
-		log.Printf("[%s] ERROR: Failed to start input ffmpeg: %v", cameraID, err)
+	var processingCmd *exec.Cmd
+
+	if detectionEnabled {
+		processingCmd = exec.Command("ffmpeg",
+			"-rtsp_transport", "tcp",
+			"-i", rtspURL,
+			"-f", "rawvideo",
+			"-pix_fmt", "bgr24",
+			"-s", fmt.Sprintf("%dx%d", frameWidth, frameHeight),
+			"-r", fmt.Sprintf("%d", faceDetectionFPS),
+			"pipe:1",
+		)
+		processingStdout, _ := processingCmd.StdoutPipe()
+		if err := processingCmd.Start(); err != nil {
+			log.Printf("[%s] ERROR: Failed to start processing ffmpeg: %v", cameraID, err)
+			passthroughCmd.Process.Kill()
+			return
+		}
+		log.Printf("[%s] Started face detection pipeline", cameraID)
+		go handleFaceDetection(cameraID, processingStdout)
+	}
+
+	if err := passthroughCmd.Start(); err != nil {
+		log.Printf("[%s] ERROR: Failed to start passthrough ffmpeg: %v", cameraID, err)
+		if processingCmd != nil && processingCmd.Process != nil {
+			processingCmd.Process.Kill()
+		}
 		return
 	}
-	if err := ffmpegOutputCmd.Start(); err != nil {
-		log.Printf("[%s] ERROR: Failed to start output ffmpeg: %v", cameraID, err)
-		return
+	log.Printf("[%s] Started video passthrough pipeline", cameraID)
+
+	mu.Lock()
+	runningCameras[cameraID] = &streamProcesses{passthroughCmd: passthroughCmd, processingCmd: processingCmd}
+	mu.Unlock()
+
+	passthroughCmd.Wait()
+
+	log.Printf("[%s] Passthrough stream ended. Cleaning up...", cameraID)
+	if processingCmd != nil && processingCmd.Process != nil {
+		processingCmd.Process.Signal(syscall.SIGTERM)
 	}
 
 	mu.Lock()
-	runningCameras[cameraID] = &streamProcesses{inputCmd: ffmpegInputCmd, outputCmd: ffmpegOutputCmd}
+	if procs, ok := runningCameras[cameraID]; ok {
+		if procs.processingCmd != nil {
+			procs.processingCmd.Wait()
+		}
+		delete(runningCameras, cameraID)
+	}
 	mu.Unlock()
-	log.Printf("[%s] Started processing and publishing stream", cameraID)
+	log.Printf("[%s] All processes stopped for camera %s", cameraID, cameraID)
+}
+
+func handleFaceDetection(cameraID string, stream io.ReadCloser) {
+	classifier := gocv.NewCascadeClassifier()
+	defer classifier.Close()
+	if !classifier.Load("haarcascade_frontalface_default.xml") {
+		log.Printf("[%s] ERROR: Failed to load cascade file for detection", cameraID)
+		return
+	}
 
 	frameBuffer := make([]byte, frameSize)
 	for {
-		if _, err := io.ReadFull(ffmpegInputStdout, frameBuffer); err != nil {
-			log.Printf("[%s] Input stream ended: %v", cameraID, err)
+		if _, err := io.ReadFull(stream, frameBuffer); err != nil {
+			log.Printf("[%s] Face detection stream ended: %v", cameraID, err)
 			break
 		}
 
 		img, err := gocv.NewMatFromBytes(frameHeight, frameWidth, gocv.MatTypeCV8UC3, frameBuffer)
 		if err != nil {
-			log.Printf("[%s] ERROR: Could not convert frame buffer to Mat: %v", cameraID, err)
+			log.Printf("[%s] ERROR: Could not convert frame for detection: %v", cameraID, err)
 			continue
 		}
 
 		rects := classifier.DetectMultiScale(img)
 		if len(rects) > 0 {
-			for _, r := range rects {
-				gocv.Rectangle(&img, r, color.RGBA{0, 255, 0, 0}, 2)
-			}
+			log.Printf("[%s] Face detected!", cameraID)
 			go postAlert(cameraID)
-		}
-
-		if _, err := ffmpegOutputStdin.Write(img.ToBytes()); err != nil {
-			log.Printf("[%s] Output stream closed: %v", cameraID, err)
-			img.Close()
-			break
 		}
 		img.Close()
 	}
-
-	log.Printf("[%s] Cleaning up processes for camera %s", cameraID, cameraID)
-	if ffmpegInputCmd.Process != nil {
-		ffmpegInputCmd.Process.Signal(syscall.SIGTERM)
-	}
-	if ffmpegOutputCmd.Process != nil {
-		ffmpegOutputCmd.Process.Signal(syscall.SIGTERM)
-	}
-	ffmpegInputCmd.Wait()
-	ffmpegOutputCmd.Wait()
-
-	mu.Lock()
-	delete(runningCameras, cameraID)
-	mu.Unlock()
-	log.Printf("[%s] Stopped processing stream for camera %s", cameraID, cameraID)
 }
 
 func postAlert(cameraID string) {

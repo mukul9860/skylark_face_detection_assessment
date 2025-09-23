@@ -14,6 +14,7 @@ CREATE TABLE "public"."Camera" (
     "location" TEXT NOT NULL,
     "rtspUrl" TEXT NOT NULL,
     "isEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "faceDetectionEnabled" BOOLEAN NOT NULL DEFAULT true,
     "ownerId" INTEGER NOT NULL,
 
     CONSTRAINT "Camera_pkey" PRIMARY KEY ("id")
@@ -22,9 +23,9 @@ CREATE TABLE "public"."Camera" (
 -- CreateTable
 CREATE TABLE "public"."Alert" (
     "id" SERIAL NOT NULL,
-    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "snapshotUrl" TEXT,
     "cameraId" INTEGER NOT NULL,
+    "snapshotUrl" TEXT,
+    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Alert_pkey" PRIMARY KEY ("id")
 );

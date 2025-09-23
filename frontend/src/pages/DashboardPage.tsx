@@ -15,6 +15,7 @@ interface Camera {
   location: string;
   rtspUrl: string;
   isEnabled: boolean;
+  faceDetectionEnabled: boolean;
 }
 
 interface Alert {
@@ -24,7 +25,6 @@ interface Alert {
   timestamp: string;
 }
 
-// New type for the camera form
 const initialCameraState = {
   name: '',
   location: '',

@@ -99,6 +99,15 @@ app.post('/api/alerts', async (c) => {
               }
           });
       }
+      const allSockets = sockets.get('all');
+      if (allSockets) {
+        const message = JSON.stringify(alert);
+          allSockets.forEach(socket => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(message);
+              }
+          });
+      }
       return c.json(alert, 201);
   } catch(e) {
       console.error("Error creating alert:", e);
@@ -131,36 +140,23 @@ protectedApi.post('/cameras', async (c) => {
     return c.json(camera, 201);
 });
 
-protectedApi.put('/cameras/:id', async (c) => {
+protectedApi.put('/cameras/:id/toggle-detection', async (c) => {
     const payload = c.get('jwtPayload');
     if (!payload || !payload.id) {
       return c.json({ error: 'Invalid token payload' }, 401);
     }
     const cameraId = parseInt(c.req.param('id'));
-    const { name, location, rtspUrl, isEnabled } = await c.req.json();
+    const { faceDetectionEnabled } = await c.req.json();
+
     const camera = await prisma.camera.updateMany({
         where: { id: cameraId, ownerId: payload.id as number },
-        data: { name, location, rtspUrl, isEnabled },
+        data: { faceDetectionEnabled },
     });
+
     if (camera.count === 0) {
         return c.json({ error: 'Camera not found or access denied' }, 404);
     }
     return c.json({ message: 'Camera updated successfully' });
-});
-
-protectedApi.delete('/cameras/:id', async (c) => {
-    const payload = c.get('jwtPayload');
-    if (!payload || !payload.id) {
-      return c.json({ error: 'Invalid token payload' }, 401);
-    }
-    const cameraId = parseInt(c.req.param('id'));
-    const camera = await prisma.camera.deleteMany({
-        where: { id: cameraId, ownerId: payload.id as number },
-    });
-    if (camera.count === 0) {
-        return c.json({ error: 'Camera not found or access denied' }, 404);
-    }
-    return c.json({ message: 'Camera deleted successfully' });
 });
 
 protectedApi.post('/cameras/:id/start', async (c) => {
@@ -176,9 +172,32 @@ protectedApi.post('/cameras/:id/start', async (c) => {
         await fetch(`http://worker:8080/start-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cameraId: camera.id.toString(), rtspUrl: camera.rtspUrl }),
+            body: JSON.stringify({
+                cameraId: camera.id.toString(),
+                rtspUrl: camera.rtspUrl,
+                faceDetectionEnabled: camera.faceDetectionEnabled,
+            }),
         });
         return c.json({ message: 'Stream start request sent' });
+    } catch (error) {
+        console.error("Failed to contact worker:", error);
+        return c.json({ error: 'Failed to contact worker service' }, 500);
+    }
+});
+
+protectedApi.post('/cameras/:id/stop', async (c) => {
+    const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+        return c.json({ error: 'Invalid token payload' }, 401);
+    }
+    const cameraId = c.req.param('id');
+    try {
+        await fetch(`http://worker:8080/stop-stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cameraId }),
+        });
+        return c.json({ message: 'Stream stop request sent' });
     } catch (error) {
         console.error("Failed to contact worker:", error);
         return c.json({ error: 'Failed to contact worker service' }, 500);
