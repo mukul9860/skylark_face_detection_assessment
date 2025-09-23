@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
     Card, CardContent, Typography, CardActions, Button, Box, Divider, 
     FormControlLabel, Switch, List, ListItem, ListItemText, IconButton, 
-    Dialog, DialogTitle, DialogContent, TextField, DialogActions 
+    Dialog, DialogTitle, DialogContent, TextField, DialogActions, DialogContentText
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import WebRTCPlayer from './WebRTCPlayer';
@@ -37,9 +37,13 @@ interface CameraTileProps {
 
 export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: CameraTileProps) {
     const [isStreaming, setIsStreaming] = useState(false);
+    const [streamState, setStreamState] = useState<'stopped' | 'connecting' | 'streaming' | 'error'>('stopped');
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [faceDetection, setFaceDetection] = useState(camera.faceDetectionEnabled);
+    
     const [openEdit, setOpenEdit] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    
     const [editedCamera, setEditedCamera] = useState({ 
         name: camera.name, 
         location: camera.location, 
@@ -62,11 +66,13 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     }, [camera.id]);
     
     const handleStartStream = async () => {
+        setIsStreaming(true);
+        setStreamState('connecting');
         try {
             await api.post(`/cameras/${camera.id}/start`);
-            setIsStreaming(true);
         } catch (error) {
             console.error(`Failed to start stream for camera ${camera.id}`, error);
+            setStreamState('error');
         }
     };
 
@@ -74,6 +80,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         try {
             await api.post(`/cameras/${camera.id}/stop`);
             setIsStreaming(false);
+            setStreamState('stopped');
         } catch (error) {
             console.error(`Failed to stop stream for camera ${camera.id}`, error);
         }
@@ -88,16 +95,8 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
             });
         } catch (error) {
             console.error(`Failed to toggle face detection for camera ${camera.id}`, error);
-            setFaceDetection(!isEnabled);
+            setFaceDetection(!isEnabled); 
         }
-    };
-
-    const handleOpenEdit = () => setOpenEdit(true);
-    const handleCloseEdit = () => setOpenEdit(false);
-
-    const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setEditedCamera(prevState => ({ ...prevState, [name]: value }));
     };
 
     const handleSaveChanges = async () => {
@@ -111,14 +110,21 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     };
 
     const handleDeleteCamera = async () => {
-        if (window.confirm(`Are you sure you want to delete the camera "${camera.name}"?`)) {
-            try {
-                await api.delete(`/cameras/${camera.id}`);
-                onCameraDelete(camera.id);
-            } catch (error) {
-                console.error(`Failed to delete camera ${camera.id}`, error);
-            }
+        setDeleteConfirmOpen(false);
+        try {
+            await api.delete(`/cameras/${camera.id}`);
+            onCameraDelete(camera.id);
+        } catch (error) {
+            console.error(`Failed to delete camera ${camera.id}`, error);
         }
+    };
+
+    const handleOpenEdit = () => setOpenEdit(true);
+    const handleCloseEdit = () => setOpenEdit(false);
+
+    const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setEditedCamera(prevState => ({ ...prevState, [name]: value }));
     };
 
     return (
@@ -126,17 +132,21 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
             <Card>
                 <Box sx={{ position: 'relative', height: 240, backgroundColor: '#000' }}>
                     {isStreaming ? (
-                        <WebRTCPlayer cameraId={camera.id} latestAlert={alerts[0]} />
+                        <WebRTCPlayer 
+                            cameraId={camera.id} 
+                            latestAlert={alerts[0]} 
+                            onStreamStateChange={(newState) => setStreamState(newState)}
+                        />
                     ) : (
                         <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
                     )}
                 </Box>
                 <CardContent>
                     <Box display="flex" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h6">{camera.name}</Typography>
+                        <Typography variant="h6" noWrap>{camera.name}</Typography>
                         <Box>
                             <IconButton size="small" onClick={handleOpenEdit} disabled={isStreaming}><EditIcon /></IconButton>
-                            <IconButton size="small" onClick={handleDeleteCamera} disabled={isStreaming}><DeleteIcon /></IconButton>
+                            <IconButton size="small" onClick={() => setDeleteConfirmOpen(true)} disabled={isStreaming}><DeleteIcon /></IconButton>
                         </Box>
                     </Box>
                     <Typography color="text.secondary" gutterBottom>{camera.location}</Typography>
@@ -171,6 +181,24 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
                 <DialogActions>
                     <Button onClick={handleCloseEdit}>Cancel</Button>
                     <Button onClick={handleSaveChanges} variant="contained">Save Changes</Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={deleteConfirmOpen}
+                onClose={() => setDeleteConfirmOpen(false)}
+            >
+                <DialogTitle>Delete Camera?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to permanently delete the camera "{camera.name}"? This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+                    <Button onClick={handleDeleteCamera} color="error" variant="contained">
+                        Delete
+                    </Button>
                 </DialogActions>
             </Dialog>
         </>

@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Box, CircularProgress, Typography, Button } from '@mui/material';
+import { ErrorOutline as ErrorIcon, Replay as ReplayIcon } from '@mui/icons-material';
 
 interface BoundingBox {
     x: number;
@@ -15,48 +17,69 @@ interface Alert {
 interface WebRTCPlayerProps {
     cameraId: number;
     latestAlert?: Alert;
+    onStreamStateChange: (state: 'connecting' | 'streaming' | 'error') => void;
 }
 
-export default function WebRTCPlayer({ cameraId, latestAlert }: WebRTCPlayerProps) {
+export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChange }: WebRTCPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [streamState, setStreamState] = useState<'connecting' | 'streaming' | 'error'>('connecting');
 
-    useEffect(() => {
+    const connect = async () => {
+        setStreamState('connecting');
+        onStreamStateChange('connecting');
         const pc = new RTCPeerConnection();
 
         pc.ontrack = (event) => {
             if (videoRef.current && event.streams.length > 0) {
                 videoRef.current.srcObject = event.streams[0];
+                setStreamState('streaming');
+                onStreamStateChange('streaming');
             }
         };
 
-        const connect = async () => {
-            try {
-                const response = await fetch(`http://${window.location.hostname}:8888/${cameraId}/whep`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/sdp' },
-                    body: pc.localDescription?.sdp,
-                });
-
-                if (response.ok) {
-                    const answer = await response.text();
-                    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-                } else {
-                    console.error('Failed to connect to WHEP endpoint');
-                }
-            } catch (error) {
-                console.error('WebRTC connection error:', error);
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+                setStreamState('error');
+                onStreamStateChange('error');
             }
         };
         
-        pc.addTransceiver('video', { 'direction': 'recvonly' });
-        pc.createOffer()
-            .then(offer => pc.setLocalDescription(offer))
-            .then(connect);
+        try {
+            pc.addTransceiver('video', { 'direction': 'recvonly' });
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const response = await fetch(`http://${window.location.hostname}:8888/${cameraId}/whep`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/sdp' },
+                body: pc.localDescription?.sdp,
+            });
+
+            if (response.ok) {
+                const answer = await response.text();
+                await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+            } else {
+                console.error('Failed to connect to WHEP endpoint');
+                setStreamState('error');
+                onStreamStateChange('error');
+            }
+        } catch (error) {
+            console.error('WebRTC connection error:', error);
+            setStreamState('error');
+            onStreamStateChange('error');
+        }
             
         return () => {
             pc.close();
         };
+    };
+
+    useEffect(() => {
+        const cleanup = connect();
+        return () => {
+            cleanup.then(fn => fn());
+        }
     }, [cameraId]);
 
     useEffect(() => {
@@ -76,8 +99,7 @@ export default function WebRTCPlayer({ cameraId, latestAlert }: WebRTCPlayerProp
         const scaleY = video.clientHeight / 480;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.strokeStyle = '#4caf50'; 
+        ctx.strokeStyle = '#4caf50';
         ctx.lineWidth = 2;
         ctx.font = '14px Arial';
         ctx.fillStyle = '#4caf50';
@@ -101,9 +123,46 @@ export default function WebRTCPlayer({ cameraId, latestAlert }: WebRTCPlayerProp
     }, [latestAlert]);
 
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-            <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
-        </div>
+        <Box sx={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
+            {streamState === 'connecting' && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'white' }}>
+                    <CircularProgress color="inherit" />
+                    <Typography sx={{ mt: 2 }}>Connecting...</Typography>
+                </Box>
+            )}
+            {streamState === 'error' && (
+                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'white' }}>
+                    <ErrorIcon sx={{ fontSize: 40 }}/>
+                    <Typography sx={{ mt: 1 }}>Stream Unavailable</Typography>
+                     <Button startIcon={<ReplayIcon />} variant="outlined" color="inherit" size="small" onClick={connect} sx={{mt: 2}}>
+                        Retry
+                    </Button>
+                </Box>
+            )}
+            <video 
+                ref={videoRef} 
+                autoPlay 
+                muted 
+                playsInline 
+                style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover',
+                    visibility: streamState === 'streaming' ? 'visible' : 'hidden'
+                }} 
+            />
+            <canvas 
+                ref={canvasRef} 
+                style={{ 
+                    position: 'absolute', 
+                    top: 0, 
+                    left: 0, 
+                    width: '100%', 
+                    height: '100%',
+                    visibility: streamState === 'streaming' ? 'visible' : 'hidden'
+                }} 
+            />
+        </Box>
     );
 }
+
