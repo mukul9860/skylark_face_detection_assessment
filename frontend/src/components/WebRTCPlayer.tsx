@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { ErrorOutline as ErrorIcon, Replay as ReplayIcon } from '@mui/icons-material';
 
+// Define the types for the props and the bounding box
 interface BoundingBox {
     x: number;
     y: number;
@@ -24,11 +25,18 @@ export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChang
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [streamState, setStreamState] = useState<'connecting' | 'streaming' | 'error'>('connecting');
+    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
     const connect = async () => {
+        if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+        }
+
         setStreamState('connecting');
         onStreamStateChange('connecting');
+        
         const pc = new RTCPeerConnection();
+        peerConnectionRef.current = pc;
 
         pc.ontrack = (event) => {
             if (videoRef.current && event.streams.length > 0) {
@@ -39,7 +47,7 @@ export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChang
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
                 setStreamState('error');
                 onStreamStateChange('error');
             }
@@ -69,17 +77,16 @@ export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChang
             setStreamState('error');
             onStreamStateChange('error');
         }
-            
-        return () => {
-            pc.close();
-        };
     };
 
     useEffect(() => {
-        const cleanup = connect();
+        connect();
+        
         return () => {
-            cleanup.then(fn => fn());
-        }
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+            }
+        };
     }, [cameraId]);
 
     useEffect(() => {
@@ -148,7 +155,7 @@ export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChang
                     width: '100%', 
                     height: '100%', 
                     objectFit: 'cover',
-                    visibility: streamState === 'streaming' ? 'visible' : 'hidden'
+                    display: streamState === 'streaming' ? 'block' : 'none'
                 }} 
             />
             <canvas 
@@ -159,10 +166,9 @@ export default function WebRTCPlayer({ cameraId, latestAlert, onStreamStateChang
                     left: 0, 
                     width: '100%', 
                     height: '100%',
-                    visibility: streamState === 'streaming' ? 'visible' : 'hidden'
+                    display: streamState === 'streaming' ? 'block' : 'none'
                 }} 
             />
         </Box>
     );
 }
-

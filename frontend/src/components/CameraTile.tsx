@@ -40,10 +40,8 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     const [streamState, setStreamState] = useState<'stopped' | 'connecting' | 'streaming' | 'error'>('stopped');
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [faceDetection, setFaceDetection] = useState(camera.faceDetectionEnabled);
-    
     const [openEdit, setOpenEdit] = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    
     const [editedCamera, setEditedCamera] = useState({ 
         name: camera.name, 
         location: camera.location, 
@@ -95,7 +93,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
             });
         } catch (error) {
             console.error(`Failed to toggle face detection for camera ${camera.id}`, error);
-            setFaceDetection(!isEnabled); 
+            setFaceDetection(!isEnabled);
         }
     };
 
@@ -118,7 +116,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
             console.error(`Failed to delete camera ${camera.id}`, error);
         }
     };
-
+    
     const handleOpenEdit = () => setOpenEdit(true);
     const handleCloseEdit = () => setOpenEdit(false);
 
@@ -126,6 +124,8 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         const { name, value } = e.target;
         setEditedCamera(prevState => ({ ...prevState, [name]: value }));
     };
+
+    const isBusy = isStreaming || streamState === 'connecting';
 
     return (
         <>
@@ -145,13 +145,13 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                         <Typography variant="h6" noWrap>{camera.name}</Typography>
                         <Box>
-                            <IconButton size="small" onClick={handleOpenEdit} disabled={isStreaming}><EditIcon /></IconButton>
-                            <IconButton size="small" onClick={() => setDeleteConfirmOpen(true)} disabled={isStreaming}><DeleteIcon /></IconButton>
+                            <IconButton size="small" onClick={handleOpenEdit} disabled={isBusy}><EditIcon /></IconButton>
+                            <IconButton size="small" onClick={() => setDeleteConfirmOpen(true)} disabled={isBusy}><DeleteIcon /></IconButton>
                         </Box>
                     </Box>
                     <Typography color="text.secondary" gutterBottom>{camera.location}</Typography>
                     <FormControlLabel
-                        control={ <Switch checked={faceDetection} onChange={handleToggleFaceDetection} name="faceDetection" disabled={isStreaming} /> }
+                        control={ <Switch checked={faceDetection} onChange={handleToggleFaceDetection} name="faceDetection" disabled={isBusy} /> }
                         label="Face Detection"
                     />
                     <Divider sx={{ my: 2 }} />
@@ -166,8 +166,10 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
                     </List>
                 </CardContent>
                 <CardActions>
-                    <Button size="small" onClick={handleStartStream} disabled={isStreaming}>Start Stream</Button>
-                    <Button size="small" color="secondary" onClick={handleStopStream} disabled={!isStreaming}>Stop Stream</Button>
+                    <Button size="small" onClick={handleStartStream} disabled={isBusy}>
+                        {streamState === 'connecting' ? 'Connecting...' : 'Start Stream'}
+                    </Button>
+                    <Button size="small" color="secondary" onClick={handleStopStream} disabled={!isStreaming || streamState === 'connecting'}>Stop Stream</Button>
                 </CardActions>
             </Card>
 
@@ -204,4 +206,3 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         </>
     );
 }
-
