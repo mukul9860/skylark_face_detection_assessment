@@ -1,4 +1,4 @@
-# Skylark - Real-Time Multi-Camera Face Detection Dashboard
+# Skylark - Real-Time Multi-Camera Face Detection Dashboard (WebRTC)
 
 This project is a microservices-based web application that allows users to monitor multiple RTSP camera streams in real-time. It features live face detection, instant alerts with snapshots, and real-time bounding box overlays directly in the browser.
 
