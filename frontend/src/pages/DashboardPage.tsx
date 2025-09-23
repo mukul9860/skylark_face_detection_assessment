@@ -126,7 +126,7 @@ export default function DashboardPage() {
     return (
       <Grid container spacing={3}>
         {cameras.map((camera) => (
-          <Grid item xs={12} sm={6} md={6} lg={4} key={camera.id}>
+          <Grid item xs={12} sm={12} md={6} lg={6} key={camera.id}>
             <CameraTile
               camera={camera}
               onCameraUpdate={handleCameraUpdate}
