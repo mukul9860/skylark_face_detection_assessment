@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gocv.io/x/gocv"
@@ -40,6 +41,7 @@ type BoundingBox struct {
 type AlertPayload struct {
 	CameraID      string        `json:"cameraId"`
 	BoundingBoxes []BoundingBox `json:"boundingBoxes"`
+	SnapshotURL   string        `json:"snapshotUrl,omitempty"`
 }
 
 func main() {
@@ -192,16 +194,36 @@ func handleFaceDetection(cameraID string, stream io.ReadCloser) {
 			for _, r := range rects {
 				boxes = append(boxes, BoundingBox{X: r.Min.X, Y: r.Min.Y, W: r.Dx(), H: r.Dy()})
 			}
-			go postAlert(cameraID, boxes)
+
+			go saveSnapshotAndPostAlert(cameraID, boxes, img.Clone())
 		}
 		img.Close()
 	}
 }
 
-func postAlert(cameraID string, boxes []BoundingBox) {
+func saveSnapshotAndPostAlert(cameraID string, boxes []BoundingBox, img gocv.Mat) {
+	defer img.Close()
+
+	timestamp := time.Now().UnixNano()
+	filename := fmt.Sprintf("snapshot_%s_%d.jpg", cameraID, timestamp)
+	filepath := fmt.Sprintf("/snapshots/%s", filename)
+
+	if ok := gocv.IMWrite(filepath, img); !ok {
+		log.Printf("[%s] ERROR: Failed to save snapshot to %s", cameraID, filepath)
+		postAlert(cameraID, boxes, "")
+		return
+	}
+
+	log.Printf("[%s] Saved snapshot to %s", cameraID, filepath)
+	snapshotURL := fmt.Sprintf("/snapshots/%s", filename)
+	postAlert(cameraID, boxes, snapshotURL)
+}
+
+func postAlert(cameraID string, boxes []BoundingBox, snapshotURL string) {
 	payloadData := AlertPayload{
 		CameraID:      cameraID,
 		BoundingBoxes: boxes,
+		SnapshotURL:   snapshotURL,
 	}
 
 	payloadBytes, err := json.Marshal(payloadData)

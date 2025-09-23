@@ -18,13 +18,10 @@ services:
     image: bluenviron/mediamtx:latest
     container_name: skylark_mediamtx
     ports:
-      - "8554:8554" # RTSP
-      - "8888:8888" # WebRTC (HTTP)
-      - "1935:1935" # RTMP
+      - "8554:8554"
+      - "8888:8888"
+      - "1935:1935"
     environment:
-      - MTX_PROTOCOLS=tcp
-      - MTX_API=yes
-      - MTX_WEBRTC=yes
       - MTX_API_ALLOWED_ORIGINS=*
       - MTX_WEBRTC_ALLOWED_ORIGINS=*
       - MTX_WEBRTC_ALLOWED_HEADERS=Content-Type
@@ -57,6 +54,8 @@ services:
     container_name: skylark_worker
     ports:
       - "8080:8080"
+    volumes:
+      - ./snapshots:/snapshots
     depends_on:
       - mediamtx
     restart: unless-stopped
@@ -68,6 +67,8 @@ services:
     container_name: skylark_frontend
     ports:
       - "80:80"
+    volumes:
+      - ./snapshots:/usr/share/nginx/html/snapshots
     depends_on:
       - backend
     restart: unless-stopped

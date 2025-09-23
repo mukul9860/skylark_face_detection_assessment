@@ -81,42 +81,7 @@ app.post('/api/login', async (c) => {
 });
 
 app.post('/api/alerts', async (c) => {
-  const { cameraId, snapshotUrl } = await c.req.json();
-  if (!cameraId) {
-      return c.json({ error: "cameraId is required" }, 400);
-  }
-  try {
-      const alert = await prisma.alert.create({
-        data: { cameraId: parseInt(cameraId), snapshotUrl },
-      });
-
-      const cameraSockets = sockets.get(cameraId.toString());
-      if (cameraSockets) {
-          const message = JSON.stringify(alert);
-          cameraSockets.forEach(socket => {
-              if (socket.readyState === WebSocket.OPEN) {
-                socket.send(message);
-              }
-          });
-      }
-      const allSockets = sockets.get('all');
-      if (allSockets) {
-        const message = JSON.stringify(alert);
-          allSockets.forEach(socket => {
-              if (socket.readyState === WebSocket.OPEN) {
-                socket.send(message);
-              }
-          });
-      }
-      return c.json(alert, 201);
-  } catch(e) {
-      console.error("Error creating alert:", e);
-      return c.json({ error: "Failed to create alert" }, 500);
-  }
-});
-
-app.post('/api/alerts', async (c) => {
-  const { cameraId, boundingBoxes } = await c.req.json();
+  const { cameraId, boundingBoxes, snapshotUrl } = await c.req.json();
   if (!cameraId) {
       return c.json({ error: "cameraId is required" }, 400);
   }
@@ -125,6 +90,7 @@ app.post('/api/alerts', async (c) => {
         data: { 
             cameraId: parseInt(cameraId), 
             boundingBoxes: boundingBoxes || [],
+            snapshotUrl: snapshotUrl,
         },
       });
 
@@ -152,7 +118,6 @@ app.post('/api/alerts', async (c) => {
       return c.json({ error: "Failed to create alert" }, 500);
   }
 });
-
 
 const authMiddleware = jwt({ secret: process.env.JWT_SECRET || 'a-default-secret' });
 const protectedApi = new Hono().use('/*', authMiddleware);
