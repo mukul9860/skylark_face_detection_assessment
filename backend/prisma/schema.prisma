@@ -27,9 +27,10 @@ model Camera {
 }
 
 model Alert {
-  id          Int      @id @default(autoincrement())
-  camera      Camera   @relation(fields: [cameraId], references: [id])
-  cameraId    Int
-  snapshotUrl String?
-  timestamp   DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  camera        Camera   @relation(fields: [cameraId], references: [id])
+  cameraId      Int
+  snapshotUrl   String?
+  boundingBoxes Json?
+  timestamp     DateTime @default(now())
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -28,6 +29,18 @@ const (
 	faceDetectionFPS = 2
 	frameSize        = frameWidth * frameHeight * 3
 )
+
+type BoundingBox struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
+}
+
+type AlertPayload struct {
+	CameraID      string        `json:"cameraId"`
+	BoundingBoxes []BoundingBox `json:"boundingBoxes"`
+}
 
 func main() {
 	r := gin.Default()
@@ -88,7 +101,6 @@ func main() {
 }
 
 func startStreamPipelines(cameraID, rtspURL string, detectionEnabled bool) {
-
 	passthroughCmd := exec.Command("ffmpeg",
 		"-rtsp_transport", "tcp",
 		"-i", rtspURL,
@@ -100,7 +112,6 @@ func startStreamPipelines(cameraID, rtspURL string, detectionEnabled bool) {
 	)
 
 	var processingCmd *exec.Cmd
-
 	if detectionEnabled {
 		processingCmd = exec.Command("ffmpeg",
 			"-rtsp_transport", "tcp",
@@ -176,15 +187,30 @@ func handleFaceDetection(cameraID string, stream io.ReadCloser) {
 		rects := classifier.DetectMultiScale(img)
 		if len(rects) > 0 {
 			log.Printf("[%s] Face detected!", cameraID)
-			go postAlert(cameraID)
+
+			var boxes []BoundingBox
+			for _, r := range rects {
+				boxes = append(boxes, BoundingBox{X: r.Min.X, Y: r.Min.Y, W: r.Dx(), H: r.Dy()})
+			}
+			go postAlert(cameraID, boxes)
 		}
 		img.Close()
 	}
 }
 
-func postAlert(cameraID string) {
-	payload := bytes.NewBuffer([]byte(fmt.Sprintf(`{"cameraId": "%s"}`, cameraID)))
-	resp, err := http.Post("http://backend:3000/api/alerts", "application/json", payload)
+func postAlert(cameraID string, boxes []BoundingBox) {
+	payloadData := AlertPayload{
+		CameraID:      cameraID,
+		BoundingBoxes: boxes,
+	}
+
+	payloadBytes, err := json.Marshal(payloadData)
+	if err != nil {
+		log.Printf("[%s] ERROR: Failed to marshal alert payload: %v", cameraID, err)
+		return
+	}
+
+	resp, err := http.Post("http://backend:3000/api/alerts", "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		log.Printf("[%s] ERROR: Failed to post alert to backend: %v", cameraID, err)
 		return
