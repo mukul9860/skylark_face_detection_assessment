@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { 
   Grid, Typography, Container, Button, CircularProgress, Paper, Box, 
   List, ListItem, ListItemText, Dialog, DialogActions, DialogContent, 
-  DialogTitle, TextField 
+  DialogTitle, TextField, Link, ListItemAvatar, Avatar
 } from '@mui/material';
-import { Add as AddIcon, VideocamOff as VideocamOffIcon } from '@mui/icons-material';
+import { Add as AddIcon, VideocamOff as VideocamOffIcon, Logout as LogoutIcon } from '@mui/icons-material';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import CameraTile from '../components/CameraTile';
@@ -23,6 +23,7 @@ interface Alert {
   cameraId: number;
   snapshotUrl?: string;
   timestamp: string;
+  boundingBoxes?: any;
 }
 
 const initialCameraState = {
@@ -39,6 +40,11 @@ export default function DashboardPage() {
 
   const [open, setOpen] = useState(false);
   const [newCamera, setNewCamera] = useState(initialCameraState);
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    navigate('/login');
+  };
 
   const handleCameraUpdate = (updatedCamera: Camera) => {
     setCameras(cameras.map(cam => cam.id === updatedCamera.id ? updatedCamera : cam));
@@ -137,9 +143,25 @@ export default function DashboardPage() {
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
           <Typography variant="h4" component="h1">Camera Dashboard</Typography>
-          {cameras.length > 0 && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpen}>Add Camera</Button>
-          )}
+          <Box>
+            {cameras.length > 0 && (
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />} 
+                onClick={handleOpen}
+                sx={{ mr: 2 }}
+              >
+                Add Camera
+              </Button>
+            )}
+            <Button 
+              variant="outlined" 
+              startIcon={<LogoutIcon />} 
+              onClick={handleLogout}
+            >
+              Logout
+            </Button>
+          </Box>
         </Box>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>{renderContent()}</Grid>
@@ -149,10 +171,31 @@ export default function DashboardPage() {
               <List sx={{ maxHeight: '70vh', overflow: 'auto' }}>
                 {alerts.length > 0 ? (
                   alerts.map(alert => (
-                    <ListItem key={alert.id}>
+                    <ListItem key={alert.id} alignItems="flex-start">
+                      {alert.snapshotUrl && (
+                        <ListItemAvatar>
+                          <Avatar 
+                            variant="rounded" 
+                            alt={`Snapshot for camera ${alert.cameraId}`} 
+                            src={alert.snapshotUrl} 
+                            sx={{ width: 56, height: 56, mr: 2 }}
+                          />
+                        </ListItemAvatar>
+                      )}
                       <ListItemText 
                         primary={`Face detected on Camera ${alert.cameraId}`}
-                        secondary={new Date(alert.timestamp).toLocaleString()}
+                        secondary={
+                          <>
+                            {new Date(alert.timestamp).toLocaleString()}
+                            {alert.snapshotUrl && (
+                              <Box>
+                                <Link href={alert.snapshotUrl} target="_blank" rel="noopener noreferrer">
+                                  View Snapshot
+                                </Link>
+                              </Box>
+                            )}
+                          </>
+                        }
                       />
                     </ListItem>
                   ))

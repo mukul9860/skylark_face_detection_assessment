@@ -17,9 +17,16 @@ interface Camera {
   faceDetectionEnabled: boolean;
 }
 
+interface BoundingBox {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
 interface Alert {
   id: number;
   timestamp: string;
+  boundingBoxes?: BoundingBox[] | null;
 }
 
 interface CameraTileProps {
@@ -32,7 +39,6 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     const [isStreaming, setIsStreaming] = useState(false);
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [faceDetection, setFaceDetection] = useState(camera.faceDetectionEnabled);
-
     const [openEdit, setOpenEdit] = useState(false);
     const [editedCamera, setEditedCamera] = useState({ 
         name: camera.name, 
@@ -105,7 +111,6 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     };
 
     const handleDeleteCamera = async () => {
-        // Use a simple browser confirm dialog
         if (window.confirm(`Are you sure you want to delete the camera "${camera.name}"?`)) {
             try {
                 await api.delete(`/cameras/${camera.id}`);
@@ -119,7 +124,13 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     return (
         <>
             <Card>
-                {isStreaming ? <WebRTCPlayer cameraId={camera.id} /> : <Box sx={{ height: 240, backgroundColor: '#000' }} />}
+                <Box sx={{ position: 'relative', height: 240, backgroundColor: '#000' }}>
+                    {isStreaming ? (
+                        <WebRTCPlayer cameraId={camera.id} latestAlert={alerts[0]} />
+                    ) : (
+                        <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                    )}
+                </Box>
                 <CardContent>
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                         <Typography variant="h6">{camera.name}</Typography>
