@@ -40,6 +40,14 @@ export default function DashboardPage() {
   const [open, setOpen] = useState(false);
   const [newCamera, setNewCamera] = useState(initialCameraState);
 
+  const handleCameraUpdate = (updatedCamera: Camera) => {
+    setCameras(cameras.map(cam => cam.id === updatedCamera.id ? updatedCamera : cam));
+  };
+
+  const handleCameraDelete = (cameraId: number) => {
+    setCameras(cameras.filter(cam => cam.id !== cameraId));
+  };
+
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
     setOpen(false);
@@ -112,7 +120,13 @@ export default function DashboardPage() {
     return (
       <Grid container spacing={3}>
         {cameras.map((camera) => (
-          <Grid item xs={12} md={6} lg={4} key={camera.id}><CameraTile camera={camera} /></Grid>
+          <Grid item xs={12} md={6} lg={4} key={camera.id}>
+            <CameraTile
+              camera={camera}
+              onCameraUpdate={handleCameraUpdate}
+              onCameraDelete={handleCameraDelete}
+            />
+          </Grid>
         ))}
       </Grid>
     );
@@ -123,7 +137,9 @@ export default function DashboardPage() {
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
           <Typography variant="h4" component="h1">Camera Dashboard</Typography>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpen}>Add Camera</Button>
+          {cameras.length > 0 && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpen}>Add Camera</Button>
+          )}
         </Box>
         <Grid container spacing={4}>
           <Grid item xs={12} md={8}>{renderContent()}</Grid>
@@ -152,38 +168,9 @@ export default function DashboardPage() {
       <Dialog open={open} onClose={handleClose}>
         <DialogTitle>Add New Camera</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            name="name"
-            label="Camera Name"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={newCamera.name}
-            onChange={handleInputChange}
-          />
-          <TextField
-            margin="dense"
-            name="location"
-            label="Location"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={newCamera.location}
-            onChange={handleInputChange}
-          />
-          <TextField
-            margin="dense"
-            name="rtspUrl"
-            label="RTSP URL"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={newCamera.rtspUrl}
-            onChange={handleInputChange}
-            placeholder="rtsp://..."
-          />
+          <TextField autoFocus margin="dense" name="name" label="Camera Name" type="text" fullWidth variant="standard" value={newCamera.name} onChange={handleInputChange} />
+          <TextField margin="dense" name="location" label="Location" type="text" fullWidth variant="standard" value={newCamera.location} onChange={handleInputChange} />
+          <TextField margin="dense" name="rtspUrl" label="RTSP URL" type="text" fullWidth variant="standard" value={newCamera.rtspUrl} onChange={handleInputChange} placeholder="rtsp://..." />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>

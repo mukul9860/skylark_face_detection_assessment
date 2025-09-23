@@ -140,6 +140,47 @@ protectedApi.post('/cameras', async (c) => {
     return c.json(camera, 201);
 });
 
+protectedApi.put('/cameras/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+        return c.json({ error: 'Invalid token payload' }, 401);
+    }
+    const cameraId = parseInt(c.req.param('id'));
+    const { name, location, rtspUrl } = await c.req.json();
+    
+    const camera = await prisma.camera.updateMany({
+        where: { id: cameraId, ownerId: payload.id as number },
+        data: { name, location, rtspUrl },
+    });
+
+    if (camera.count === 0) {
+        return c.json({ error: 'Camera not found or access denied' }, 404);
+    }
+    const updatedCamera = await prisma.camera.findUnique({ where: { id: cameraId }});
+    return c.json(updatedCamera);
+});
+
+protectedApi.delete('/cameras/:id', async (c) => {
+    const payload = c.get('jwtPayload');
+    if (!payload || !payload.id) {
+        return c.json({ error: 'Invalid token payload' }, 401);
+    }
+    const cameraId = parseInt(c.req.param('id'));
+
+    await prisma.alert.deleteMany({
+        where: { cameraId: cameraId }
+    });
+
+    const camera = await prisma.camera.deleteMany({
+        where: { id: cameraId, ownerId: payload.id as number },
+    });
+
+    if (camera.count === 0) {
+        return c.json({ error: 'Camera not found or access denied' }, 404);
+    }
+    return c.json({ message: 'Camera deleted successfully' });
+});
+
 protectedApi.put('/cameras/:id/toggle-detection', async (c) => {
     const payload = c.get('jwtPayload');
     if (!payload || !payload.id) {
