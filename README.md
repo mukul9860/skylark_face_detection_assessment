@@ -117,6 +117,21 @@ You can register a new user directly from the login page. For demonstration purp
 3.  **Start Streaming**: Click the "Start Stream" button on a camera tile. A "Connecting..." message will appear, and the video should start playing.
     
 4.  **Test Face Detection**: Ensure the "Face Detection" toggle is on. When a face appears in the stream, you should see real-time alerts with snapshots on the right and bounding boxes on the video.
+
+
+## References
+
+-   [React](https://react.dev/)
+-   [Vite](https://vitejs.dev/)
+-   [Material-UI (MUI)](https://mui.com/)
+-   [Hono](https://hono.dev/)
+-   [Prisma](https://www.prisma.io/)
+-   [Go (Golang)](https://go.dev/)
+-   [Gin Web Framework](https://gin-gonic.com/)
+-   [gocv - Go CV Package](https://gocv.io/)
+-   [MediaMTX](https://github.com/bluenviron/mediamtx)
+-   [FFmpeg](https://ffmpeg.org/)
+-   [Docker](https://www.docker.com/)
     
 
 ## Known Limitations & Future Improvements
