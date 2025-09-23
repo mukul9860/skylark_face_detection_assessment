@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -46,6 +47,10 @@ type AlertPayload struct {
 
 func main() {
 	r := gin.Default()
+
+	r.GET("/healthz", func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
 
 	r.POST("/start-stream", func(c *gin.Context) {
 		var req struct {
@@ -110,7 +115,7 @@ func startStreamPipelines(cameraID, rtspURL string, detectionEnabled bool) {
 		"-an",
 		"-f", "rtsp",
 		"-rtsp_transport", "tcp",
-		fmt.Sprintf("rtsp://mediamtx:8554/%s", cameraID),
+		fmt.Sprintf("rtsp://skylark-mediamtx:8554/%s", cameraID),
 	)
 
 	var processingCmd *exec.Cmd
@@ -220,6 +225,11 @@ func saveSnapshotAndPostAlert(cameraID string, boxes []BoundingBox, img gocv.Mat
 }
 
 func postAlert(cameraID string, boxes []BoundingBox, snapshotURL string) {
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://backend:3000/api/alerts"
+	}
+
 	payloadData := AlertPayload{
 		CameraID:      cameraID,
 		BoundingBoxes: boxes,
@@ -232,7 +242,7 @@ func postAlert(cameraID string, boxes []BoundingBox, snapshotURL string) {
 		return
 	}
 
-	resp, err := http.Post("http://backend:3000/api/alerts", "application/json", bytes.NewBuffer(payloadBytes))
+	resp, err := http.Post(backendURL, "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		log.Printf("[%s] ERROR: Failed to post alert to backend: %v", cameraID, err)
 		return
