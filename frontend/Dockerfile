@@ -3,6 +3,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+ARG VITE_API_BASE_URL
+ARG VITE_WORKER_URL
+ARG VITE_MEDIAMTX_URL
 RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
 RUN echo "VITE_WORKER_URL=${VITE_WORKER_URL}" >> .env.production
 RUN echo "VITE_MEDIAMTX_URL=${VITE_MEDIAMTX_URL}" >> .env.production

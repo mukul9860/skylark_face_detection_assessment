@@ -10,6 +10,10 @@ import { URL } from 'url';
 const prisma = new PrismaClient();
 const app = new Hono();
 
+app.get('/health', (c) => {
+  return c.text('OK', 200);
+});
+
 const wss = new WebSocketServer({ noServer: true });
 const sockets = new Map<string, Set<WebSocket>>();
 
