@@ -41,6 +41,8 @@ https://skylark-frontend.onrender.com
 *   **Media Server**: MediaMTX for WebRTC and RTSP stream handling
     
 *   **Containerization**: Docker and Docker Compose
+
+*   **Render**: Hosting Frontend, Backend and Worker
     
 
 ## How to Run Locally
