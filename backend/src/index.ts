@@ -47,10 +47,7 @@ wss.on('connection', (ws, request) => {
   }
 });
 
-app.use('/api/*', cors({
-  origin: ['http://localhost', 'http://localhost:5173'],
-  credentials: true,
-}));
+app.use('*', cors());
 
 app.post('/api/register', async (c) => {
     const { username, password } = await c.req.json();

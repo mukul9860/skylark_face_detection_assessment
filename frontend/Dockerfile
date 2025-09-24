@@ -8,6 +8,5 @@ RUN npm run build
 FROM nginx:stable-alpine AS production
 COPY --from=build /app/dist /usr/share/nginx/html
 RUN rm /etc/nginx/conf.d/default.conf
-COPY nginx.conf /etc/nginx/conf.d/nginx.conf.template
-
-CMD /bin/sh -c "envsubst '\$NGINX_PROXY_URL \$VITE_WORKER_URL' < /etc/nginx/conf.d/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+COPY nginx.conf /etc/nginx/conf.d/
+CMD ["nginx", "-g", "daemon off;"]
