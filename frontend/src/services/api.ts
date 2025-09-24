@@ -2,7 +2,7 @@ import axios from "axios";
 
 console.log('test_api1',import.meta.env.VITE_API_BASE_URL)
 const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
 apiClient.interceptors.request.use(
