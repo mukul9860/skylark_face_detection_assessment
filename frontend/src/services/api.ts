@@ -1,8 +1,18 @@
-import axios from "axios";
+import axios from 'axios';
 
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
-});
+const apiClient = axios.create();
+const configureApiClient = async () => {
+  try {
+    const response = await fetch('/config.json');
+    const config = await response.json();
+    
+    apiClient.defaults.baseURL = config.VITE_API_BASE_URL;
+    console.log('API client configured with baseURL:', config.VITE_API_BASE_URL);
+
+  } catch (error) {
+    console.error('Failed to load app configuration:', error);
+  }
+};
 
 apiClient.interceptors.request.use(
   (config) => {
@@ -24,5 +34,5 @@ export const startStream = async (cameraId: number | string) => {
 export const stopStream = async (cameraId: number | string) => {
   return apiClient.post(`/cameras/${cameraId}/stop`);
 };
-  
-export default apiClient;
+
+export { apiClient, configureApiClient };
