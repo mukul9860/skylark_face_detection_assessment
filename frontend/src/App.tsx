@@ -1,46 +1,24 @@
-import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { CircularProgress, Box } from '@mui/material';
-import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
-import NotFoundPage from './pages/NotFoundPage';
+import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import { configureApiClient, isApiClientConfigured } from './services/api';
+import NotFoundPage from './pages/NotFoundPage';
+
+const LoginPageWrapper = () => {
+  const token = localStorage.getItem('authToken');
+  return token ? <Navigate to="/dashboard" replace /> : <LoginPage />;
+};
 
 function App() {
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const initializeApp = async () => {
-      if (!isApiClientConfigured()) {
-        await configureApiClient();
-      }
-      setIsLoading(false);
-    };
-    initializeApp();
-  }, []);
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
+  console.log('VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/login" element={<LoginPageWrapper />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+        </Route>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Router>

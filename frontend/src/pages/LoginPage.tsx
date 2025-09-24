@@ -5,7 +5,7 @@ import {
   InputAdornment, IconButton 
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import {apiClient} from '../services/api';
+import api from '../services/api';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     try {
-      const response = await apiClient.post('/login', { username, password });
+      const response = await api.post('/login', { username, password });
       localStorage.setItem('authToken', response.data.token);
       setError('');
       navigate('/dashboard');
@@ -30,7 +30,7 @@ export default function LoginPage() {
 
   const handleRegister = async () => {
     try {
-      await apiClient.post('/register', { username, password });
+      await api.post('/register', { username, password });
       setError('');
       alert('Registration successful! Please log in.');
       setIsLogin(true);

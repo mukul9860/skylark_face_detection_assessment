@@ -1,24 +1,12 @@
-import axios from 'axios';
+import axios from "axios";
 
-const apiClient = axios.create();
-let isConfigured = false;
-
-const configureApiClient = async () => {
-  if (isConfigured) return;
-  try {
-    const response = await fetch('/config.json');
-    const config = await response.json();
-    apiClient.defaults.baseURL = config.VITE_API_BASE_URL;
-    isConfigured = true; // Set flag to true
-    console.log('API client configured with baseURL:', config.VITE_API_BASE_URL);
-  } catch (error) {
-    console.error('Failed to load app configuration:', error);
-  }
-};
+const apiClient = axios.create({
+  baseURL: "/api",
+});
 
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -26,17 +14,23 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  },
+  }
 );
 
-export const isApiClientConfigured = () => isConfigured;
-
-export const startStream = async (cameraId: number | string) => {
-  return apiClient.post(`/cameras/${cameraId}/start`);
+export const startStream = async (
+  cameraId: string,
+  rtspUrl: string,
+  faceDetectionEnabled: boolean
+) => {
+  return apiClient.post("/worker/start-stream", {
+    cameraId,
+    rtspUrl,
+    faceDetectionEnabled,
+  });
 };
 
-export const stopStream = async (cameraId: number | string) => {
-  return apiClient.post(`/cameras/${cameraId}/stop`);
+export const stopStream = async (cameraId: string) => {
+  return apiClient.post("/worker/stop-stream", { cameraId });
 };
-  
-export { apiClient, configureApiClient };
+
+export default apiClient;
