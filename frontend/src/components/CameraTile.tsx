@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, VideocamOff as VideocamOffIcon } from '@mui/icons-material';
 import WebRTCPlayer from './WebRTCPlayer';
-import api from '../services/api';
+import { apiClient } from '../services/api';
 
 interface Camera {
   id: number;
@@ -71,7 +71,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         setIsStreaming(true);
         setStreamState('connecting');
         try {
-            await api.post(`/cameras/${camera.id}/start`);
+            await apiClient.post(`/cameras/${camera.id}/start`);
         } catch (error) {
             console.error(`Failed to start stream for camera ${camera.id}`, error);
             setStreamState('error');
@@ -80,7 +80,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
 
     const handleStopStream = async () => {
         try {
-            await api.post(`/cameras/${camera.id}/stop`);
+            await apiClient.post(`/cameras/${camera.id}/stop`);
             setIsStreaming(false);
             setStreamState('stopped');
         } catch (error) {
@@ -92,7 +92,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
         const isEnabled = event.target.checked;
         setFaceDetection(isEnabled);
         try {
-            await api.put(`/cameras/${camera.id}/toggle-detection`, {
+            await apiClient.put(`/cameras/${camera.id}/toggle-detection`, {
                 faceDetectionEnabled: isEnabled
             });
         } catch (error) {
@@ -103,7 +103,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
 
     const handleSaveChanges = async () => {
         try {
-            const response = await api.put<Camera>(`/cameras/${camera.id}`, editedCamera);
+            const response = await apiClient.put<Camera>(`/cameras/${camera.id}`, editedCamera);
             onCameraUpdate(response.data);
             handleCloseEdit();
         } catch (error) {
@@ -114,7 +114,7 @@ export default function CameraTile({ camera, onCameraUpdate, onCameraDelete }: C
     const handleDeleteCamera = async () => {
         setDeleteConfirmOpen(false);
         try {
-            await api.delete(`/cameras/${camera.id}`);
+            await apiClient.delete(`/cameras/${camera.id}`);
             onCameraDelete(camera.id);
         } catch (error) {
             console.error(`Failed to delete camera ${camera.id}`, error);

@@ -5,7 +5,7 @@ import {
   DialogTitle, TextField, Link, ListItemAvatar, Avatar
 } from '@mui/material';
 import { Add as AddIcon, VideocamOff as VideocamOffIcon, Logout as LogoutIcon } from '@mui/icons-material';
-import api from '../services/api';
+import {apiClient} from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import CameraTile from '../components/CameraTile';
 
@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
   const handleAddCamera = async () => {
     try {
-      const response = await api.post<Camera>('/cameras', newCamera);
+      const response = await apiClient.post<Camera>('/cameras', newCamera);
       setCameras(prevCameras => [...prevCameras, response.data]);
       handleClose();
     } catch (error) {
@@ -78,7 +78,7 @@ export default function DashboardPage() {
     const fetchCameras = async () => {
       try {
         setLoading(true);
-        const response = await api.get<Camera[]>('/cameras');
+        const response = await apiClient.get<Camera[]>('/cameras');
         setCameras(response.data);
       } catch (error) {
         console.error('Failed to fetch cameras, redirecting to login', error);
