@@ -47,7 +47,9 @@ wss.on('connection', (ws, request) => {
   }
 });
 
-app.use('*', cors());
+app.use('*', cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+}));
 
 app.post('/api/register', async (c) => {
     const { username, password } = await c.req.json();
@@ -84,8 +86,8 @@ app.post('/api/alerts', async (c) => {
   }
   try {
       const alert = await prisma.alert.create({
-        data: { 
-            cameraId: parseInt(cameraId), 
+        data: {
+            cameraId: parseInt(cameraId),
             boundingBoxes: boundingBoxes || [],
             snapshotUrl: snapshotUrl,
         },
@@ -147,7 +149,7 @@ protectedApi.put('/cameras/:id', async (c) => {
     }
     const cameraId = parseInt(c.req.param('id'));
     const { name, location, rtspUrl } = await c.req.json();
-    
+
     const camera = await prisma.camera.updateMany({
         where: { id: cameraId, ownerId: payload.id as number },
         data: { name, location, rtspUrl },
@@ -200,6 +202,7 @@ protectedApi.put('/cameras/:id/toggle-detection', async (c) => {
     return c.json({ message: 'Camera updated successfully' });
 });
 
+const workerUrl = process.env.WORKER_URL || 'http://worker:8080';
 protectedApi.post('/cameras/:id/start', async (c) => {
     const payload = c.get('jwtPayload');
     if (!payload || !payload.id) {
@@ -210,7 +213,7 @@ protectedApi.post('/cameras/:id/start', async (c) => {
     if (!camera) return c.json({ error: 'Camera not found or access denied' }, 404);
 
     try {
-        await fetch(`http://worker:8080/start-stream`, {
+        await fetch(`${workerUrl}/start-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -233,7 +236,7 @@ protectedApi.post('/cameras/:id/stop', async (c) => {
     }
     const cameraId = c.req.param('id');
     try {
-        await fetch(`http://worker:8080/stop-stream`, {
+        await fetch(`${workerUrl}/stop-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cameraId }),

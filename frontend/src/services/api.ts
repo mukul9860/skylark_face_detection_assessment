@@ -17,20 +17,12 @@ apiClient.interceptors.request.use(
   },
 );
 
-export const startStream = async (
-    cameraId: string,
-    rtspUrl: string,
-    faceDetectionEnabled: boolean
-  ) => {
-    return apiClient.post("/worker/start-stream", {
-      cameraId,
-      rtspUrl,
-      faceDetectionEnabled,
-    });
-  };
+export const startStream = async (cameraId: number | string) => {
+  return apiClient.post(`/cameras/${cameraId}/start`);
+};
+
+export const stopStream = async (cameraId: number | string) => {
+  return apiClient.post(`/cameras/${cameraId}/stop`);
+};
   
-  export const stopStream = async (cameraId: string) => {
-    return apiClient.post("/worker/stop-stream", { cameraId });
-  };
-  
-  export default apiClient;
+export default apiClient;
